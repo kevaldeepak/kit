@@ -16,6 +16,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 from kit import system  # noqa: E402
 
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:  # noqa: BLE001
+        pass
+
 WIN = system.IS_WIN
 ENV = dict(os.environ, KIT_NONINTERACTIVE="1", PYTHONUTF8="1")
 MSGS = os.path.join(system.CONFIG_DIR, "..", "e2e-messages.jsonl")
@@ -81,6 +87,14 @@ def main():
                 time.sleep(0.1)
         base = f"127.0.0.1:{port}"
         print(f"fake ntfy on {base}, os={system.OS}, scheduler={system.scheduler_kind()}")
+        import urllib.request
+        t0 = time.time()
+        try:
+            with urllib.request.urlopen(f"http://{base}/v1/health", timeout=10) as r:
+                print("probe direct:", r.status, round(time.time() - t0, 2), "s")
+        except Exception as e:  # noqa: BLE001
+            print("probe direct failed:", e, round(time.time() - t0, 2), "s")
+        print("proxies:", urllib.request.getproxies())
 
         check(os.path.exists(cmd("kit")), "kit command exists after bootstrap")
         out = run("kit", "available", "--offline")
