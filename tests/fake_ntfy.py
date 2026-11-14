@@ -61,5 +61,12 @@ class H(BaseHTTPRequestHandler):
         self.reply(404, "{}")
 
 
+class Server(ThreadingHTTPServer):
+    def server_bind(self):  # skip HTTPServer's reverse DNS (slow on macOS runners)
+        import socketserver
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = "localhost", self.server_address[1]
+
+
 if __name__ == "__main__":
-    ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
+    Server(("127.0.0.1", int(sys.argv[1])), H).serve_forever()

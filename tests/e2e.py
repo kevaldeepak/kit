@@ -79,22 +79,16 @@ def main():
         os.remove(MSGS)
     srv = subprocess.Popen([sys.executable, os.path.join(HERE, "fake_ntfy.py"), str(port), MSGS])
     try:
-        for _ in range(50):
+        for _ in range(300):
             try:
                 socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
                 break
             except OSError:
                 time.sleep(0.1)
+        else:
+            raise SystemExit("fake ntfy didn't start")
         base = f"127.0.0.1:{port}"
         print(f"fake ntfy on {base}, os={system.OS}, scheduler={system.scheduler_kind()}")
-        import urllib.request
-        t0 = time.time()
-        try:
-            with urllib.request.urlopen(f"http://{base}/v1/health", timeout=10) as r:
-                print("probe direct:", r.status, round(time.time() - t0, 2), "s")
-        except Exception as e:  # noqa: BLE001
-            print("probe direct failed:", e, round(time.time() - t0, 2), "s")
-        print("proxies:", urllib.request.getproxies())
 
         check(os.path.exists(cmd("kit")), "kit command exists after bootstrap")
         out = run("kit", "available", "--offline")
