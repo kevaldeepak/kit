@@ -1,6 +1,6 @@
 """rss module hooks.
 
-Settings (--set key=value): topic, profile, starter (yes/no)
+Settings (--set key=value): topic, profile, starter (yes/no), test_push (yes/no)
 """
 import os
 import sys
@@ -44,6 +44,9 @@ def configure(ctx):
 
 def install(ctx):
     st = ctx.load()
+    if ctx.opts.get("test_push", "yes").lower() in ("no", "n", "false", "0"):
+        ctx.say("Add a feed: rss add <url>    All commands: rss")
+        return
     try:
         ctx.notify.send(st["topic"], "✅ rss is set up", f"Alerts from {ctx.hostname} will arrive on this topic.",
                         priority=2, tags=["white_check_mark"], profile=st["profile"])
