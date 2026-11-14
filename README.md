@@ -31,6 +31,7 @@ kit configure <module>     change a module's settings
 kit remove <module>        uninstall (keeps config; --purge deletes it)
 kit update [module]        update kit and installed modules
 kit doctor [module]        check everything is working
+kit schedule <module> off  stop kit's timer (when n8n or your own cron runs it)
 kit self-uninstall         remove kit itself (--purge: config too)
 ```
 

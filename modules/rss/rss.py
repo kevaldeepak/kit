@@ -684,12 +684,16 @@ def doctor_checks():
                 out.append((False, f'feed "{raw.get("name")}" uses missing profile "{p}"'))
     else:
         out.append((True, "feeds.yaml: not created yet (rss add <url>)"))
+    kit_off = system.read_json(system.STATE_FILE).get("modules", {}).get("rss", {}).get("schedule") == "off"
     info = system.schedule_info("rss")
-    out.append((bool(info), f"schedule: {info or 'missing (kit update rss --force)'}"))
+    if kit_off:
+        out.append((True, "schedule: off in kit (something else runs `rss run --log`)"))
+    else:
+        out.append((bool(info), f"schedule: {info or 'missing (kit update rss --force)'}"))
     last = load_state().get("_meta", {}).get("last_run")
     if last:
         late = now() - last > 20 * 60
-        out.append((not late or not info, f"last run {ago(last)}" + (" (schedule may not be running)" if late else "")))
+        out.append((not late, f"last run {ago(last)}" + (" (schedule may not be running)" if late else "")))
     failing = [k for k, v in load_state().items() if k != "_meta" and v.get("fails")]
     if failing:
         out.append((False, "failing feeds: " + ", ".join(failing)))

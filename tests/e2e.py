@@ -125,6 +125,12 @@ def main():
         else:
             print(f"schedule: {info}")
         run("kit", "doctor", ok=None)
+        run("kit", "schedule", "rss", "off")
+        check(system.schedule_info("rss") is None, "kit schedule rss off removes the job")
+        check("off in kit" in run("rss", "doctor", ok=None), "rss doctor knows the schedule is external")
+        run("kit", "schedule", "rss", "on")
+        if STRICT_SCHED:
+            check(bool(system.schedule_info("rss")), "kit schedule rss on restores the job")
 
         out = run("kit", "remove", "ntfy", ok=False)
         check("depends on ntfy" in out, "removing ntfy warns that rss depends on it")

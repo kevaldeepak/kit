@@ -21,6 +21,8 @@ kit: modules for this device, from github.com/kevaldeepak/kit
   kit remove <module>        uninstall (keeps config; --purge deletes it)
   kit update [module]        update kit and installed modules
   kit doctor [module]        check everything is working
+  kit schedule <module> on|off   let kit run it on a timer, or leave that to
+                             something else (n8n, your own cron)
   kit self-uninstall         remove kit itself (--purge: config too)
 
 Options: -y/--yes accept defaults, --set key=value answer a prompt up front,
@@ -123,7 +125,11 @@ def module_commands(m):
     return (m.get("commands") or {}).items()
 
 
-def apply_runtime(m):
+def schedule_enabled(name):
+    return installed().get(name, {}).get("schedule", "on") != "off"
+
+
+def apply_runtime(m, enabled=None):
     """Shims + schedule for an installed module. Returns schedule message."""
     mod_dir = os.path.join(system.MODULES_DIR, m["name"])
     for cmd, script in module_commands(m):
@@ -131,6 +137,9 @@ def apply_runtime(m):
     sch = m.get("schedule")
     if not sch:
         return None
+    if not (schedule_enabled(m["name"]) if enabled is None else enabled):
+        system.schedule_remove(m["name"])
+        return "off (kit schedule " + m["name"] + " on to enable)"
     script = (m.get("commands") or {}).get(sch.get("command")) or sch.get("script")
     argv = system.schedule_argv(os.path.join(mod_dir, script), sch.get("args") or [])
     ok, msg = system.schedule_add(m["name"], argv, int(sch.get("every_min", 5)))
@@ -305,7 +314,7 @@ def install_one(m, opts, yes, auto=False):
     hooks = load_hooks(name, dest)
     try:
         hook(hooks, "configure", ctx)
-        sched = apply_runtime(m)
+        sched = apply_runtime(m, enabled=opts.get("schedule") != "off")
         if sched:
             ui.say(f"Schedule: {sched}")
         hook(hooks, "install", ctx)
@@ -314,7 +323,8 @@ def install_one(m, opts, yes, auto=False):
         system.rmtree(dest)
         raise
     st = load_state()
-    st["modules"][name] = {"version": m.get("version", "0.0.0"), "auto": auto,
+    st["modules"][name] = {**({"schedule": "off"} if opts.get("schedule") == "off" else {}),
+                           "version": m.get("version", "0.0.0"), "auto": auto,
                            "installed_at": datetime.datetime.now().isoformat(timespec="seconds")}
     save_state(st)
     problems = [msg for ok, msg in (hook(hooks, "doctor", ctx) or []) if not ok]
@@ -519,7 +529,10 @@ def cmd_doctor(a):
             checks.insert(0, (d in inst, f"needs {d}" + ("" if d in inst else " (NOT installed)")))
         for cmd, _ in module_commands(m):
             checks.append((os.path.exists(system.shim_path(cmd)), f"command {cmd}"))
-        if m.get("schedule") and not any(msg.startswith("schedule:") for _, msg in checks):
+        if m.get("schedule") and not schedule_enabled(n):
+            checks = [c for c in checks if not c[1].startswith("schedule:")]
+            checks.append((True, "schedule: off in kit (run it from n8n/cron yourself)"))
+        elif m.get("schedule") and not any(msg.startswith("schedule:") for _, msg in checks):
             info = system.schedule_info(n)
             checks.append((bool(info), f"schedule: {info or 'missing'}"))
         ui.say(f"\n{n} v{inst[n]['version']}")
@@ -528,6 +541,31 @@ def cmd_doctor(a):
             bad += 0 if ok else 1
     ui.say("\nAll good." if not bad else f"\n{bad} problem(s).")
     return 0 if not bad else 1
+
+
+def cmd_schedule(a):
+    n = a.module
+    if n not in installed():
+        raise ui.Abort(f"{n} isn't installed.")
+    m = installed_manifest(n)
+    if not m.get("schedule"):
+        raise ui.Abort(f"{n} has nothing to schedule.")
+    if a.state == "status":
+        on = schedule_enabled(n)
+        ui.say(f"{n}: {'on' if on else 'off'}, {system.schedule_info(n) or 'no job registered'}")
+        return 0
+    st = load_state()
+    st["modules"][n]["schedule"] = a.state
+    save_state(st)
+    msg = apply_runtime(m)
+    cmd = m["schedule"].get("command")
+    args = " ".join(m["schedule"].get("args") or [])
+    if a.state == "off":
+        ui.say(f"{n}: kit no longer runs it. To run it yourself every "
+               f"{m['schedule'].get('every_min', 5)} min: {system.shim_path(cmd)} {args}")
+    else:
+        ui.say(f"{n}: schedule {msg}")
+    return 0
 
 
 def write_pth():
@@ -626,6 +664,9 @@ def build_parser():
     sp.add_argument("--force", action="store_true")
     sp = add("doctor")
     sp.add_argument("modules", nargs="*")
+    sp = add("schedule")
+    sp.add_argument("module")
+    sp.add_argument("state", choices=["on", "off", "status"])
     sp = add("setup")
     sp.add_argument("--source")
     sp.add_argument("--from", dest="from_dir")
@@ -648,7 +689,7 @@ COMMANDS = {"available": cmd_available, "avail": cmd_available, "search": cmd_av
             "list": cmd_list, "ls": cmd_list, "info": cmd_info, "show": cmd_info,
             "install": cmd_install, "add": cmd_install, "configure": cmd_configure, "config": cmd_configure,
             "remove": cmd_remove, "rm": cmd_remove, "uninstall": cmd_remove,
-            "update": cmd_update, "upgrade": cmd_update, "doctor": cmd_doctor,
+            "update": cmd_update, "upgrade": cmd_update, "doctor": cmd_doctor, "schedule": cmd_schedule,
             "setup": cmd_setup, "self-uninstall": cmd_self_uninstall}
 
 
