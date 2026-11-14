@@ -1,0 +1,8 @@
+{
+  "name": "ntfy",
+  "version": "1.0.0",
+  "description": "ntfy server connection + notify command (no hosting)",
+  "requires": [],
+  "platforms": ["linux", "macos", "windows"],
+  "commands": {"notify": "notify_cmd.py"}
+}

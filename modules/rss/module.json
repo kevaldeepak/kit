@@ -1,0 +1,9 @@
+{
+  "name": "rss",
+  "version": "1.0.0",
+  "description": "RSS/Atom feeds to ntfy push alerts",
+  "requires": ["ntfy"],
+  "platforms": ["linux", "macos", "windows"],
+  "commands": {"rss": "rss.py"},
+  "schedule": {"command": "rss", "args": ["run", "--log"], "every_min": 5}
+}
