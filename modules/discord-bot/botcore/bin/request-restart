@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+"""Restart the Discord bot safely from inside a bot turn, and leave a note so
+the bot says it's back (in the channel of the current turn) once it reconnects.
+
+    request-restart "✅ Back online, changed X"
+    echo "long status" | request-restart
+
+The restart runs detached: it waits for the current reply to finish, checks
+the new code boots, and rolls back to the last good version if it doesn't.
+"""
+import json
+import os
+import pathlib
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+
+content = " ".join(sys.argv[1:]).strip()
+if not content and not sys.stdin.isatty():
+    content = sys.stdin.read().strip()
+if not content:
+    sys.exit("request-restart: need a message to post after the restart")
+chan = os.environ.get("DISCORD_CHANNEL_ID", "").strip()
+if not chan:
+    sys.exit("request-restart: DISCORD_CHANNEL_ID not set (run it inside a bot turn)")
+
+MODULE = pathlib.Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(MODULE))
+import svc  # noqa: E402
+
+ok, msg = svc.precheck()
+if not ok:
+    sys.exit("request-restart: REFUSED, the bot code fails its check (nothing restarted):\n" + msg)
+
+state = svc.paths.STATE
+handover = state / "restart_handover.json"
+fd, tmp = tempfile.mkstemp(dir=str(state), prefix=".handover-")
+with os.fdopen(fd, "w") as f:
+    json.dump({"channel_id": chan, "content": content, "ts": time.time()}, f)
+os.replace(tmp, handover)
+
+cmd = [sys.executable, str(MODULE / "dbot.py"), "restart", "--quiet"]
+log = open(svc.paths.LOGS / "restart.log", "a")
+if svc.kind() == "systemd" and shutil.which("systemd-run"):
+    # outside the bot's own service, so restarting the bot doesn't kill it
+    env = [f"--setenv=BOT_HOME={svc.paths.HOME}"]
+    subprocess.run(["systemd-run", "--user", "--collect", "--quiet",
+                    f"--unit=kit-dbot-restart-{int(time.time())}", *env, *cmd], check=True)
+else:
+    subprocess.Popen(cmd, stdout=log, stderr=log, stdin=subprocess.DEVNULL,
+                     start_new_session=True, env={**os.environ, "BOT_HOME": str(svc.paths.HOME)})
+print("request-restart: note written, restart scheduled (waits for this reply to finish)")

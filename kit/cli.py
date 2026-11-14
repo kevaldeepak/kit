@@ -211,7 +211,7 @@ def cmd_available(a):
             else:
                 notes.append("installed")
         tail = f"   ({'; '.join(notes)})" if notes else ""
-        ui.say(f"  [{i}] {n:<8} v{m['version']:<7} {m['description']}{tail}")
+        ui.say(f"  [{i}] {n:<12} v{m['version']:<7} {m['description']}{tail}")
     ui.say("\nInstall with: kit install <module>")
     return 0
 
@@ -224,7 +224,7 @@ def cmd_list(a):
     for n, rec in inst.items():
         m = installed_manifest(n) or {}
         extra = " (installed as a dependency)" if rec.get("auto") else ""
-        ui.say(f"{n:<8} v{rec['version']:<7} {m.get('description', '')}{extra}")
+        ui.say(f"{n:<12} v{rec['version']:<7} {m.get('description', '')}{extra}")
     return 0
 
 
@@ -269,7 +269,7 @@ def pick_modules(avail):
             tail.append("needs " + ", ".join(m["requires"]))
         if n in inst:
             tail.append("installed")
-        ui.say(f"  [{i}] {n:<8} v{m['version']:<7} {m['description']}" + (f"  ({'; '.join(tail)})" if tail else ""))
+        ui.say(f"  [{i}] {n:<12} v{m['version']:<7} {m['description']}" + (f"  ({'; '.join(tail)})" if tail else ""))
     while True:
         raw = input("Pick modules (e.g. 2, or 1 2): ").replace(",", " ").split()
         try:
@@ -311,8 +311,11 @@ def install_one(m, opts, yes, auto=False):
     system.copy_tree(m["_dir"], dest)
     m = installed_manifest(name)
     ctx = Ctx(m, opts, yes)
-    hooks = load_hooks(name, dest)
     try:
+        if m.get("pip"):
+            ui.say("Installing Python packages: " + ", ".join(m["pip"]))
+            system.pip_install(m["pip"])
+        hooks = load_hooks(name, dest)
         hook(hooks, "configure", ctx)
         sched = apply_runtime(m, enabled=opts.get("schedule") != "off")
         if sched:
@@ -494,6 +497,8 @@ def cmd_update(a):
         dest = os.path.join(system.MODULES_DIR, n)
         system.copy_tree(m["_dir"], dest)
         im = installed_manifest(n)
+        if im.get("pip"):
+            system.pip_install(im["pip"])
         hooks = load_hooks(n, dest)
         hook(hooks, "upgrade", Ctx(im, {}, a.yes), old)
         apply_runtime(im)

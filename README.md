@@ -49,6 +49,7 @@ Dependencies are handled both ways: installing a module offers to install what i
 |---|---|---|
 | `ntfy` | Saves an ntfy server connection (URL + token) as a named profile and adds a `notify` command. Doesn't host ntfy. | |
 | `rss` | Watches RSS/Atom feeds and pushes new items (and status-page incident updates) to an ntfy topic. Runs every 5 min. | ntfy |
+| `discord-bot` | Your own Discord bot that runs Claude Code on this computer with your Claude account. Linux and macOS. | |
 
 ### ntfy
 
@@ -80,6 +81,35 @@ Each feed can override the topic (`--topic`) or the ntfy profile (`--profile`).
 
 If two devices watch the same feed and post to the same topic, you get each alert twice. Add a feed on one device only.
 
+### discord-bot
+
+Talk to Claude Code from Discord: each conversation gets its own thread, you can steer a reply while it runs, run tasks in parallel, get option buttons and files back, and watch a live progress card.
+
+You need: a Claude account (Pro/Max), and a Discord bot you create yourself (free). `kit install discord-bot` walks through it:
+
+1. installs Claude Code if it's missing and checks you're signed in (`claude`, then `/login`)
+2. asks for your bot token (Discord Developer Portal > New Application > Bot > Reset Token; turn on **Message Content Intent** on the same page) and checks it
+3. prints an invite link, then lets you pick the channel it listens in
+4. asks for your Discord user id: **only you** can talk to it, everyone else is ignored
+5. asks for the access mode: `full` (Claude can edit files and run commands, like Claude Code itself) or `safe` (read, search and web only)
+
+It runs as a background service (systemd user service on Linux, launchd on macOS) and comes back after a reboot.
+
+```
+dbot status | start | stop
+dbot restart [--now]       waits for replies in progress; rolls back if it doesn't come back up
+dbot logs [-f]
+dbot update | rollback
+dbot config                settings (token hidden)
+dbot set mode safe         or: channel, owner, name, workdir, model, helpers, ...
+dbot allow USER_ID         let someone else use it (deny to remove)
+dbot doctor
+```
+
+The token is stored in `~/.config/kit/discord-bot/secrets.env`, readable only by your user, never written to logs and never passed to Claude. Claude's own permission rules also block it from reading that file. Your Claude login stays in Claude Code's own store; kit never touches it.
+
+In Discord: message the channel to start a thread, reply in the thread to continue, react ❌ on the progress message to stop, 🔄 on a reply to redo it. Slash commands: `/model`, `/helpers`, `/reset`, `/cancel`, `/brief`, `/usage`, `/claude on|off`, `/status`.
+
 ## Where things live
 
 | | Linux / macOS | Windows |
@@ -95,7 +125,7 @@ Secrets files are readable only by your user (chmod 600 / icacls).
 
 ```
 modules/<name>/
-  module.json   name, version, description, requires, platforms, commands, schedule
+  module.json   name, version, description, requires, platforms, commands, schedule, pip
   module.py     optional hooks: configure, install, uninstall, upgrade, doctor
   <script>.py   commands, run with kit's Python (import kit.notify to send pushes)
 ```
@@ -111,6 +141,8 @@ modules/<name>/
   "schedule": {"command": "rss", "args": ["run", "--log"], "every_min": 5}
 }
 ```
+
+`pip` lists Python packages installed into kit's private Python with the module.
 
 Hooks get a `ctx` with `ask`, `confirm`, `load`/`save` (module config), `notify` and `system`. Push the folder and it appears in `kit available` on every device.
 

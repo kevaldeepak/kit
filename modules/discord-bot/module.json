@@ -1,0 +1,9 @@
+{
+  "name": "discord-bot",
+  "version": "1.0.0",
+  "description": "Claude Code on Discord: your own bot, your own Claude account",
+  "requires": [],
+  "platforms": ["linux", "macos"],
+  "pip": ["discord.py>=2.7,<3", "openpyxl"],
+  "commands": {"dbot": "dbot.py"}
+}

@@ -48,6 +48,9 @@ jobs:
         run: |
           if (-not $env:KIT_REF) { $env:KIT_SOURCE = $env:GITHUB_WORKSPACE; Remove-Item Env:KIT_REF -ErrorAction SilentlyContinue }
           Get-Content -Raw bootstrap.ps1 | Invoke-Expression
+      - name: e2e discord-bot (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: ~/.local/share/kit/venv/bin/python tests/e2e_dbot.py
       - name: e2e (Linux/macOS)
         if: runner.os != 'Windows'
         run: ~/.local/share/kit/venv/bin/python tests/e2e.py

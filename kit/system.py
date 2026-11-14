@@ -126,6 +126,35 @@ def copy_tree(src, dst):
     rmtree(old)
 
 
+# ---------- python packages for modules ----------
+
+def find_uv():
+    exe = "uv.exe" if IS_WIN else "uv"
+    for c in (shutil.which("uv"), os.path.join(HOME, ".local", "bin", exe),
+              os.path.join(HOME, ".cargo", "bin", exe)):
+        if c and os.path.exists(c):
+            return c
+    return None
+
+
+def pip_install(pkgs):
+    """Install a module's Python packages into kit's private venv.
+    Uses uv (what bootstrap installed), else the venv's own pip."""
+    pkgs = list(pkgs or [])
+    if not pkgs:
+        return
+    py = python_exe()
+    uv = find_uv()
+    if uv:
+        cmd = [uv, "pip", "install", "--quiet", "--python", py, *pkgs]
+    else:
+        subprocess.run([py, "-m", "ensurepip", "--upgrade"], capture_output=True)
+        cmd = [py, "-m", "pip", "install", "--quiet", *pkgs]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError("installing " + ", ".join(pkgs) + " failed: " + (r.stderr or r.stdout).strip()[-400:])
+
+
 # ---------- shims (commands on PATH) ----------
 
 def shim_path(name):
