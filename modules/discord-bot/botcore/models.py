@@ -48,7 +48,7 @@ HELPER_MCP_FLAGS = ("--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}')
 
 
 # Human-facing model names for the per-reply usage footer. Keyed by the internal
-# model token used in run_pipeline / run_streaming (tier token or registry key).
+# model token used in run_turn / run_streaming (tier token or registry key).
 # Used only as a fallback when the stream didn't report a concrete model id.
 BIG_LABEL = MODELS[DEFAULT_BIG]["label"]
 MODEL_LABELS = {**{k: v["label"] for k, v in MODELS.items()},

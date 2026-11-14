@@ -436,7 +436,7 @@ def _agent_label(inp):
 
 
 # ──── live agent-card integration (bin/discord-live-card.py) ─────
-# The turn's status message doubles as the agent-card canvas. run_pipeline
+# The turn's status message doubles as the agent-card canvas. run_turn
 # writes an init file carrying the status message id + a title; the card
 # tool's `start` PATCHes that same message into the full card and drops an
 # "owned" marker. While owned, the bot must never edit the message again and
@@ -1215,7 +1215,7 @@ class OptionView(discord.ui.View):
                                         "author": interaction.user.display_name,
                                         "content": note, "status": "pending"}) + "\n")
                 return
-            _spawn(run_pipeline(interaction.channel, note, self.session_key,
+            _spawn(run_turn(interaction.channel, note, self.session_key,
                                 mention=self.mention,
                                 thread_hint=f"button answer: {_label[:60]}"))
 
@@ -1366,9 +1366,9 @@ async def finalize(status_msg, channel, reply, reply_to=None, mention=None, rout
     return main_msg, tail_dest
 
 
-# ──── PIPELINE ───────────────────────────────────────────────────
+# ──── TURN ───────────────────────────────────────────────────
 
-async def run_pipeline(channel, prompt, session_key, reply_to=None,
+async def run_turn(channel, prompt, session_key, reply_to=None,
                        persist_session=True, remember_for_redo=True, mention=None,
                        thread_hint=None, speed=None, route=None, meta=None,
                        model_pin=None, task_id=None, fork_session=False,
@@ -1707,12 +1707,12 @@ async def run_pipeline(channel, prompt, session_key, reply_to=None,
     _fw = dict(fork_session=fork_session,
                resume_sid=(new_sid if fork_session else None)) if fork_session else {}
     if defer:
-        await run_pipeline(channel, "[Deferred task from your previous turn — do it now]\n"
+        await run_turn(channel, "[Deferred task from your previous turn — do it now]\n"
                            + defer, session_key, mention=mention, thread_hint=defer, **_fw)
     leftover = drain_inbox(track_key)
     if leftover:
         combo = "\n".join(f"- {c}" for c in leftover)
-        await run_pipeline(channel,
+        await run_turn(channel,
                            f"[These messages from {OWNER} arrived while you were busy and were "
                            "NOT yet handled — handle them now in one coherent reply]\n" + combo,
                            session_key, mention=mention, thread_hint=leftover[0], **_fw)
@@ -1956,7 +1956,7 @@ async def model_cmd(interaction: discord.Interaction, size: str = "", message: s
         who = f"[discord user: {interaction.user.display_name} (@{interaction.user.name})]"
         full = f"{who}\n\n{message}"
         in_thread = isinstance(interaction.channel, discord.Thread)
-        await run_pipeline(interaction.channel, full, key, reply_to=None,
+        await run_turn(interaction.channel, full, key, reply_to=None,
                            persist_session=in_thread, mention=interaction.user.mention,
                            thread_hint=message, model_pin=PIN_MODELS[val])
         return
@@ -2184,7 +2184,7 @@ async def on_message(message):
 
     # Conversational thread finder: "find my thread about github repos",
     # "list my threads". Read-only and session-free, so it answers right away —
-    # even mid-turn — and never spins up its own thread or pipeline run.
+    # even mid-turn — and never spins up its own thread or Claude run.
     if (not ultracode and not attachments and len(body) <= 200
             and THREAD_FIND_RE.search(body)):
         await handle_thread_find(message)
@@ -2192,7 +2192,7 @@ async def on_message(message):
 
     # Follow-up to a recent thread search: "what about X?", "and X?", "try X"
     # Catches the pattern where the user refines their search without repeating
-    # "find thread" — avoids accidentally spawning a new thread+pipeline run.
+    # "find thread" — avoids accidentally spawning a new thread and Claude run.
     _last_search = recent_thread_searches.get(message.channel.id, 0)
     if (not ultracode and not attachments and len(body) <= 200
             and time.time() - _last_search < 90):
@@ -2236,7 +2236,7 @@ async def on_message(message):
                       "this thread. Another Claude instance is handling the other "
                       "task(s); do ONLY what this message asks, and don't touch "
                       "the other tasks' work.]\n")
-            _spawn(run_pipeline(message.channel, prefix + content, key,
+            _spawn(run_turn(message.channel, prefix + content, key,
                                 reply_to=message, mention=message.author.mention,
                                 thread_hint=body, fork_session=True, task_id=ntid))
             return
@@ -2330,7 +2330,7 @@ async def on_message(message):
     full = await build_prompt(message, body, attachments, ultracode=ultracode,
                               include_thread_history=in_thread and not sessions.get(run_key),
                               attachment_notes=att_notes)
-    await run_pipeline(run_channel, full, run_key, reply_to=run_reply_to,
+    await run_turn(run_channel, full, run_key, reply_to=run_reply_to,
                        mention=message.author.mention, thread_hint=body,
                        speed=speed, route=route, model_pin=model_pin,
                        meta={"lane": "fast" if speed in ("fast", "haiku") else "direct",
@@ -2394,7 +2394,7 @@ async def on_reaction_add(reaction, user):
             with contextlib.suppress(discord.HTTPException):
                 await reaction.message.add_reaction("👀")
             return
-        _spawn(run_pipeline(reaction.message.channel, note, _ask["session_key"],
+        _spawn(run_turn(reaction.message.channel, note, _ask["session_key"],
                             mention=_ask.get("mention"),
                             thread_hint=f"reaction follow-up: {_ask['excerpt'][:60]}"))
         return
@@ -2421,7 +2421,7 @@ async def on_reaction_add(reaction, user):
     # Fresh session for the redo
     sessions.pop(key, None)
     save_sessions(sessions)
-    await run_pipeline(channel, prompt_text, key, reply_to=reply_to, mention=mention)
+    await run_turn(channel, prompt_text, key, reply_to=reply_to, mention=mention)
 
 
 _loops_started = False
