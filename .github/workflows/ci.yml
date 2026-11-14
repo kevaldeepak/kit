@@ -1,0 +1,57 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup-specific values check
+        run: scripts/check-secrets.sh
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  e2e:
+    # Full install -> use -> remove cycle on each OS, through the real
+    # bootstrap. On push it downloads from GitHub exactly like the one-liner.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      KIT_NONINTERACTIVE: "1"
+      KIT_REF: ${{ github.event_name == 'push' && github.ref_name || '' }}
+      KIT_E2E_REAL_SCHEDULER: ${{ matrix.os == 'macos-latest' && '0' || '1' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: cron (Linux)
+        if: runner.os == 'Linux'
+        run: command -v crontab || (sudo apt-get update -qq && sudo apt-get install -y -qq cron)
+      - name: Bootstrap (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          if [ -z "$KIT_REF" ]; then export KIT_SOURCE="$GITHUB_WORKSPACE"; fi
+          bash bootstrap.sh
+      - name: Bootstrap (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not $env:KIT_REF) { $env:KIT_SOURCE = $env:GITHUB_WORKSPACE; Remove-Item Env:KIT_REF -ErrorAction SilentlyContinue }
+          Get-Content -Raw bootstrap.ps1 | Invoke-Expression
+      - name: e2e (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: ~/.local/share/kit/venv/bin/python tests/e2e.py
+      - name: e2e (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: '& "$env:LOCALAPPDATA\kit\venv\Scripts\python.exe" tests/e2e.py'
